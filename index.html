@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistem NFT Hidroponik & Database V5 Final</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-slate-50 font-sans text-slate-800 p-4 md:p-6">
+
+  <div class="max-w-7xl mx-auto space-y-6">
+    
+    <!-- HEADER & REAL-TIME CLOCK -->
+    <div class="bg-white p-6 rounded-2xl shadow-sm border flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+      <div>
+        <h1 class="text-2xl font-black text-emerald-700">🌱 Sistem NFT Hidroponik & Database</h1>
+        <p class="text-xs text-slate-500 mt-0.5">Sinkronisasi Real-Time dengan Google Sheets (Data Alur Produksi & Kualitas Air)</p>
+      </div>
+      <div class="flex flex-wrap gap-2 text-sm items-center">
+        <div class="bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-200 text-center min-w-[180px]">
+          <span class="block text-[10px] text-emerald-600 font-semibold uppercase tracking-wider">Waktu Real-Time</span>
+          <span id="realtime-clock" class="text-sm font-bold text-emerald-900">-</span>
+        </div>
+        
+        <!-- INDIKATOR AUTO-SYNC DATABASE -->
+        <div class="bg-slate-50 px-4 py-2.5 rounded-xl border flex items-center gap-2 min-w-[160px] justify-center">
+          <span id="sync-status" class="text-xs font-bold text-emerald-600">🟢 Tersimpan Real-time</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAIN CHART & WATER LEVEL SECTION -->
+    <div class="bg-white p-6 rounded-2xl border shadow-sm space-y-4">
+      
+      <!-- HEADER GRAFIK -->
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h3 class="font-bold text-base text-slate-800">📊 Dashboard Tren pH, PPM & Tangki</h3>
+          <p class="text-xs text-slate-500">Menampilkan data real dari sheet berdasarkan zona yang dipilih.</p>
+        </div>
+        
+        <!-- KONTROL GRAFIK (TOGGLE ZONA & RENTANG WAKTU) -->
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="bg-slate-100 p-1 rounded-xl flex gap-1 text-xs font-semibold" id="stage-toggles">
+            <button onclick="setChartStage('semai')" id="btn-chart-semai" class="px-4 py-1.5 rounded-lg transition text-slate-600 hover:text-slate-800">Meja Semai</button>
+            <button onclick="setChartStage('peremajaan')" id="btn-chart-peremajaan" class="px-4 py-1.5 rounded-lg transition text-slate-600 hover:text-slate-800">Peremajaan</button>
+            <button onclick="setChartStage('pembesaran')" id="btn-chart-pembesaran" class="px-4 py-1.5 rounded-lg transition bg-white text-emerald-700 shadow-sm border border-slate-200">Pembesaran</button>
+          </div>
+
+          <div class="w-px h-6 bg-slate-300 hidden md:block"></div>
+
+          <div class="bg-slate-100 p-1 rounded-xl flex gap-1 text-xs font-semibold">
+            <button onclick="changeTimeRange(7)" id="btn-range-7" class="px-3 py-1.5 rounded-lg transition bg-white text-slate-800 shadow-sm">1 Mgg</button>
+            <button onclick="changeTimeRange(14)" id="btn-range-14" class="px-3 py-1.5 rounded-lg transition text-slate-600 hover:text-slate-800">2 Mgg</button>
+            <button onclick="changeTimeRange(30)" id="btn-range-30" class="px-3 py-1.5 rounded-lg transition text-slate-600 hover:text-slate-800">1 Bln</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- AREA GRAFIK & WATER LEVEL -->
+      <div class="flex flex-col md:flex-row gap-4 pt-2">
+        <!-- LINE CHART CONTAINER (Ditambahkan min-w-0 agar tidak overlap/blowout) -->
+        <div class="flex-1 min-w-0 relative h-64 border border-slate-200 rounded-xl bg-slate-50/50 p-2">
+           <canvas id="main-chart"></canvas>
+        </div>
+
+        <!-- WATER LEVEL STICK -->
+        <div class="w-full md:w-24 flex flex-col items-center bg-slate-50 border border-slate-200 rounded-xl p-3 h-64 shadow-inner">
+           <div class="text-[10px] text-slate-500 font-bold mb-2 text-center" id="wl-max-label">Max 180<br>Cm</div>
+           
+           <!-- TONGKAT VERTICAL -->
+           <div class="relative w-8 bg-blue-100/50 rounded-full flex-1 overflow-hidden border border-blue-200 flex flex-col justify-end shadow-inner mx-auto">
+               <div id="wl-fill" class="bg-blue-500 w-full transition-all duration-1000 ease-out relative" style="height: 0%;">
+                  <div class="absolute top-0 left-0 w-full h-2 bg-blue-400 opacity-50 rounded-t-full"></div>
+               </div>
+           </div>
+
+           <div class="mt-3 text-sm font-black text-blue-900 text-center" id="wl-current-label">-- cm</div>
+           <div class="text-[9px] text-slate-400 mt-0.5 text-center font-semibold">WATER Lvl</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAIN INTERACTIVE TABS -->
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      
+      <!-- NAVIGASI TAHAPAN -->
+      <div class="space-y-2 bg-white p-4 rounded-2xl border shadow-sm h-fit">
+        <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 px-2">Alur Produksi NFT</h2>
+        
+        <button onclick="switchTab('nursery')" id="tab-nursery" class="w-full text-left px-4 py-3 rounded-xl font-semibold text-sm transition bg-slate-100 text-slate-600 hover:bg-slate-200 space-y-1">
+          <div>1. Meja Nursery (10 Baris)</div>
+        </button>
+
+        <button onclick="switchTab('peremajaan')" id="tab-peremajaan" class="w-full text-left px-4 py-3 rounded-xl font-semibold text-sm transition bg-slate-100 text-slate-600 hover:bg-slate-200 space-y-1">
+          <div>2. Meja Peremajaan (2.400 Lubang)</div>
+        </button>
+
+        <button onclick="switchTab('pembesaran')" id="tab-pembesaran" class="w-full text-left px-4 py-3 rounded-xl font-semibold text-sm transition bg-emerald-600 text-white shadow space-y-1">
+          <div>3. Meja Pembesaran (14 Meja)</div>
+        </button>
+
+        <button onclick="switchTab('panen')" id="tab-panen" class="w-full text-left px-4 py-3 rounded-xl font-semibold text-sm transition bg-slate-100 text-slate-600 hover:bg-slate-200">
+          4. Zona Panen & Pengemasan 📦
+        </button>
+      </div>
+
+      <!-- KONTEN UTAMA AREA -->
+      <div class="lg:col-span-3 bg-white p-6 rounded-2xl border shadow-sm min-h-[500px] flex flex-col justify-between">
+        
+        <div>
+          <!-- VIEW 1: NURSERY -->
+          <div id="view-nursery" class="hidden space-y-4">
+            <div class="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-3 bg-slate-50 p-4 rounded-xl border">
+              <div>
+                <h3 class="font-bold text-base text-slate-800">Form Semai Benih di Nursery</h3>
+                <p class="text-[11px] text-slate-500 mt-1">10 Baris Tray (Kapasitas maks 420 lubang per baris).</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <select id="select-komoditi" class="p-2 border rounded-lg text-xs bg-white font-medium outline-none">
+                  <option value="Selada">Selada (Panen 40 HSS)</option>
+                  <option value="Pakcoy">Pakcoy (Panen 35 HSS)</option>
+                  <option value="Kailan">Kailan (Panen 40 HSS)</option>
+                  <option value="Sawi Hijau">Sawi Hijau (Panen 30 HSS)</option>
+                  <option value="Kangkung">Kangkung (Panen 25 HSS)</option>
+                  <option value="Bayam">Bayam (Panen 25 HSS)</option>
+                </select>
+                
+                <input type="text" id="seed-variety" placeholder="Merek/Varietas (opsional)" class="w-36 p-2 border rounded-lg text-xs outline-none bg-white">
+                <select id="target-row" class="p-2 border rounded-lg text-xs bg-white font-medium outline-none"></select>
+                <input type="number" id="seed-qty" value="40" min="1" max="420" placeholder="Qty" class="w-16 p-2 border rounded-lg text-xs text-center outline-none bg-white">
+
+                <button onclick="plantCustomBatch()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow transition">
+                  Semai
+                </button>
+              </div>
+            </div>
+
+            <div class="overflow-x-auto border rounded-xl">
+              <table class="w-full text-left text-xs">
+                <thead class="bg-slate-100 border-b text-slate-600">
+                  <tr>
+                    <th class="p-3 w-1/4">Baris Tray Nursery</th>
+                    <th class="p-3">Daftar Tanaman & Progress Usia Pindah Tanam</th>
+                  </tr>
+                </thead>
+                <tbody id="nursery-tbody" class="divide-y divide-slate-200"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- VIEW 2: PEREMAJAAN -->
+          <div id="view-peremajaan" class="hidden space-y-4">
+            <div class="flex justify-between items-center">
+              <div>
+                <h3 class="font-bold text-lg text-slate-800">Meja Peremajaan (Nursery Lanjutan)</h3>
+                <p class="text-xs text-slate-500">Kapasitas Total: 2.400 Lubang NFT</p>
+              </div>
+              <span id="peremajaan-capacity" class="text-xs font-bold bg-blue-100 text-blue-800 px-3 py-1 rounded-full">Terisi: 0 / 2400</span>
+            </div>
+            <div class="p-4 bg-slate-50 border rounded-xl space-y-3">
+              <div id="peremajaan-list" class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[450px] overflow-y-auto pr-2"></div>
+            </div>
+          </div>
+
+          <!-- VIEW 3: PEMBESARAN -->
+          <div id="view-pembesaran" class="space-y-6">
+            <div>
+              <h3 class="font-bold text-lg text-slate-800">Meja Pembesaran NFT (14 Meja)</h3>
+              <p class="text-[11px] text-slate-500 mt-1">Setiap hari bar progress usia HSS bergeser maju mendekati hari perkiraan panen.</p>
+            </div>
+
+            <div class="space-y-4">
+              <h4 class="font-bold text-xs uppercase tracking-wider text-emerald-700 bg-emerald-50 px-3 py-2 rounded-lg border border-emerald-200">Kelompok Meja 1 – 7</h4>
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3" id="pembesaran-grid-1"></div>
+            </div>
+
+            <div class="space-y-4 pt-4 border-t border-slate-200">
+              <h4 class="font-bold text-xs uppercase tracking-wider text-blue-700 bg-blue-50 px-3 py-2 rounded-lg border border-blue-200">Kelompok Meja 8 – 14</h4>
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3" id="pembesaran-grid-2"></div>
+            </div>
+          </div>
+
+          <!-- VIEW 4: ZONA PANEN & PACKAGING -->
+          <div id="view-panen" class="hidden space-y-4">
+            <div>
+              <h3 class="font-bold text-lg text-slate-800">Zona Panen & Pengemasan</h3>
+              <p class="text-xs text-slate-500">Tentukan harga jual real-time saat sayuran dikemas.</p>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="p-5 border rounded-xl bg-emerald-50/50 border-emerald-200 space-y-3">
+                <h4 class="font-bold text-emerald-900 text-sm">📦 Pengemasan & Penjualan</h4>
+                <div id="packaging-area" class="space-y-3"></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- MODAL PANEN CUSTOM -->
+  <div id="modal-panen" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden flex items-center justify-center z-50 p-4">
+    <div class="bg-white p-6 rounded-2xl max-w-sm w-full space-y-4 shadow-xl">
+      <h3 class="font-bold text-base text-slate-800">Panen Sebagian / Penuh</h3>
+      <p id="modal-panen-info" class="text-xs text-slate-500"></p>
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1">Jumlah yang dipanen saat ini:</label>
+        <input type="number" id="modal-panen-qty" min="1" class="w-full p-2.5 border rounded-lg text-sm outline-none bg-slate-50 font-bold text-slate-800">
+      </div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button onclick="closePanenModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-bold transition">Batal</button>
+        <button onclick="executePanenCustom()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow transition">Proses Panen</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- API URL GOOGLE SHEETS (JANGAN DIUBAH) ---
+    const API_URL = "https://script.google.com/macros/s/AKfycbwR_Z5JBIiU_Vg6ibcVQ6EsCgyOIzgD6g5kTF97oqdnMErfvPl5xxdkAULOEIbHjjVT/exec";
+
+    // --- 1. DATA REAL DARI SPREADSHEET (Untuk Grafik & Water Level Saja) ---
+    const rawSheetData = [
+      { tgl: "23 Okt", jam: "9:45", semai: {ph:8.3, ppm:432}, perem: {ph:7.8, ppm:740}, pemb: {ph:7.8, ppm:740}, wl_semai: null, wl_perem: null, wl_pemb: null },
+      { tgl: "23 Okt", jam: "15:11", semai: {ph:8.2, ppm:433}, perem: {ph:8.0, ppm:700}, pemb: {ph:8.0, ppm:700}, wl_semai: null, wl_perem: null, wl_pemb: null },
+      { tgl: "24 Okt", jam: "9:51", semai: {ph:7.4, ppm:420}, perem: {ph:7.4, ppm:614}, pemb: {ph:7.4, ppm:614}, wl_semai: null, wl_perem: null, wl_pemb: null },
+      { tgl: "24 Okt", jam: "15:34", semai: {ph:7.0, ppm:452}, perem: {ph:6.7, ppm:616}, pemb: {ph:6.7, ppm:616}, wl_semai: null, wl_perem: null, wl_pemb: null },
+      { tgl: "25 Okt", jam: "9:48", semai: {ph:8.0, ppm:320}, perem: {ph:7.4, ppm:595}, pemb: {ph:7.4, ppm:595}, wl_semai: null, wl_perem: null, wl_pemb: null },
+      { tgl: "25 Okt", jam: "16:16", semai: {ph:8.4, ppm:311}, perem: {ph:7.0, ppm:586}, pemb: {ph:7.0, ppm:586}, wl_semai: null, wl_perem: null, wl_pemb: null },
+      { tgl: "26 Okt", jam: "16:32", semai: {ph:8.2, ppm:415}, perem: {ph:7.5, ppm:642}, pemb: {ph:7.5, ppm:642}, wl_semai: null, wl_perem: null, wl_pemb: null },
+      { tgl: "27 Okt", jam: "10:49", semai: {ph:4.5, ppm:645}, perem: {ph:7.6, ppm:656}, pemb: {ph:7.6, ppm:656}, wl_semai: null, wl_perem: null, wl_pemb: null },
+      { tgl: "27 Okt", jam: "17:55", semai: {ph:null, ppm:null}, perem: {ph:8.3, ppm:555}, pemb: {ph:8.3, ppm:555}, wl_semai: null, wl_perem: null, wl_pemb: 62 },
+      { tgl: "28 Okt", jam: "10:38", semai: {ph:null, ppm:null}, perem: {ph:7.3, ppm:658}, pemb: {ph:7.3, ppm:658}, wl_semai: null, wl_perem: null, wl_pemb: null },
+      { tgl: "29 Okt", jam: "10:43", semai: {ph:8.1, ppm:725}, perem: {ph:7.6, ppm:745}, pemb: {ph:7.6, ppm:745}, wl_semai: null, wl_perem: null, wl_pemb: 55 },
+      { tgl: "29 Okt", jam: "16:59", semai: {ph:8.0, ppm:725}, perem: {ph:6.3, ppm:788}, pemb: {ph:6.3, ppm:779}, wl_semai: null, wl_perem: null, wl_pemb: null },
+      { tgl: "30 Okt", jam: "9:17", semai: {ph:8.1, ppm:788}, perem: {ph:7.0, ppm:779}, pemb: {ph:7.0, ppm:779}, wl_semai: null, wl_perem: null, wl_pemb: null },
+      { tgl: "31 Okt", jam: "9:02", semai: {ph:7.6, ppm:422}, perem: {ph:7.9, ppm:459}, pemb: {ph:7.9, ppm:459}, wl_semai: null, wl_perem: null, wl_pemb: 95 },
+      { tgl: "31 Okt", jam: "13:52", semai: {ph:8.4, ppm:432}, perem: {ph:8.2, ppm:580}, pemb: {ph:8.2, ppm:580}, wl_semai: null, wl_perem: null, wl_pemb: 92 },
+      { tgl: "31 Okt", jam: "16:43", semai: {ph:null, ppm:null}, perem: {ph:8.3, ppm:599}, pemb: {ph:8.3, ppm:599}, wl_semai: null, wl_perem: null, wl_pemb: 92 },
+      { tgl: "31 Okt", jam: "16:43", semai: {ph:null, ppm:null}, perem: {ph:7.6, ppm:725}, pemb: {ph:7.6, ppm:725}, wl_semai: null, wl_perem: null, wl_pemb: null }
+    ];
+
+    // --- 2. LOGIKA STATE INVENTORY (Diisi dari API Google Sheets) ---
+    let state = {
+      nurseryRows: Array.from({length: 10}, (_, i) => ({ id: i+1, batches: [] })),
+      peremajaanBatches: [], 
+      pembesaranTables: Array.from({length: 14}, (_, i) => ({ id: i+1, rowsData: [] })), 
+      inventoryReadyToPack: [] 
+    };
+
+    let activeChartStage = 'pembesaran';
+    let mainChartInstance = null;
+
+    // --- 3. FETCH & SYNC DATABASE ---
+    function loadDataFromDatabase() {
+      const statusEl = document.getElementById('sync-status');
+      statusEl.innerHTML = "⏳ Memuat Data...";
+      statusEl.className = "text-xs font-bold text-amber-500";
+
+      fetch(API_URL)
+        .then(res => res.json())
+        .then(res => {
+          if(res.success && res.data && res.data.length > 0) {
+            reconstructState(res.data);
+            renderAll();
+            statusEl.innerHTML = "🟢 Data Dimuat Real-time";
+            statusEl.className = "text-xs font-bold text-emerald-600";
+          } else {
+            renderAll();
+            statusEl.innerHTML = "🟢 Siap Digunakan";
+            statusEl.className = "text-xs font-bold text-emerald-600";
+          }
+        })
+        .catch(err => {
+          statusEl.innerHTML = "🔴 Gagal Memuat Data";
+          statusEl.className = "text-xs font-bold text-red-600";
+        });
+    }
+
+    function reconstructState(dbData) {
+      // Reset state sebelum dipopulasi
+      state.nurseryRows = Array.from({length: 10}, (_, i) => ({ id: i+1, batches: [] }));
+      state.peremajaanBatches = [];
+      state.pembesaranTables = Array.from({length: 14}, (_, i) => ({ id: i+1, rowsData: [] }));
+
+      dbData.forEach(row => {
+        const batch = {
+          id: Date.now() + Math.random(), 
+          code: row.kodeUnik,
+          type: row.komoditi, 
+          count: parseInt(row.jumlah) || 0,
+          tglSemai: row.tglSemai,
+          hargaJual: 0
+        };
+
+        if (row.tahapan === "Nursery") {
+          const match = row.lokasi.match(/\d+/);
+          if (match) {
+            const rowId = parseInt(match[0]);
+            const targetRow = state.nurseryRows.find(r => r.id === rowId);
+            if (targetRow) targetRow.batches.push(batch);
+          }
+        } else if (row.tahapan === "Peremajaan") {
+          state.peremajaanBatches.push(batch);
+        } else if (row.tahapan === "Pembesaran") {
+          const mejaMatch = row.lokasi.match(/Meja #(\d+)/);
+          const barisMatch = row.lokasi.match(/\((.*?)\)/);
+          if (mejaMatch) {
+            const tableId = parseInt(mejaMatch[1]);
+            const rowName = barisMatch ? barisMatch[1] : "Baris 1";
+            const targetTable = state.pembesaranTables.find(t => t.id === tableId);
+            if (targetTable) {
+              batch.rowName = rowName;
+              targetTable.rowsData.push(batch);
+            }
+          }
+        }
+      });
+    }
+
+    function autoSync() {
+      const statusEl = document.getElementById('sync-status');
+      statusEl.innerHTML = "⏳ Menyimpan...";
+      statusEl.className = "text-xs font-bold text-amber-500";
+      let payload = [];
+      
+      state.nurseryRows.forEach(r => {
+        r.batches.forEach(b => {
+          payload.push({ timestamp: new Date(), tahapan: "Nursery", lokasi: `Baris Tray #${r.id}`, komoditi: b.type, jumlah: b.count, kodeUnik: b.code, tglSemai: b.tglSemai, hargaJual: 0 });
+        });
+      });
+      state.peremajaanBatches.forEach(b => {
+        payload.push({ timestamp: new Date(), tahapan: "Peremajaan", lokasi: "Instalasi Peremajaan", komoditi: b.type, jumlah: b.count, kodeUnik: b.code, tglSemai: b.tglSemai, hargaJual: 0 });
+      });
+      state.pembesaranTables.forEach(t => {
+        t.rowsData.forEach(r => {
+          payload.push({ timestamp: new Date(), tahapan: "Pembesaran", lokasi: `Meja #${t.id} (${r.rowName})`, komoditi: r.type, jumlah: r.count, kodeUnik: r.code, tglSemai: r.tglSemai, hargaJual: 0 });
+        });
+      });
+      
+      fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: "saveData", payload: payload })
+      })
+      .then(res => res.json())
+      .then(res => {
+        if(res.success) {
+          statusEl.innerHTML = "🟢 Tersimpan Real-time";
+          statusEl.className = "text-xs font-bold text-emerald-600";
+        }
+      })
+      .catch(err => {
+        statusEl.innerHTML = "🔴 Gagal Terhubung Server";
+        statusEl.className = "text-xs font-bold text-red-600";
+      });
+    }
+
+    // --- 4. LOGIKA CHART.JS & WATER LEVEL ---
+    const configLimits = {
+      semai: { minPpm: 200, maxPpm: 800, maxWl: 50, label: 'Meja Semai' },
+      peremajaan: { minPpm: 400, maxPpm: 900, maxWl: 50, label: 'Peremajaan' },
+      pembesaran: { minPpm: 400, maxPpm: 900, maxWl: 180, label: 'Pembesaran' }
+    };
+
+    const optimalPhPlugin = {
+      id: 'optimalPhPlugin',
+      beforeDraw(chart) {
+        const { ctx, chartArea: { left, right, top, bottom }, scales: { y } } = chart;
+        if (!y) return;
+        ctx.save();
+        const y55 = y.getPixelForValue(5.5);
+        const y62 = y.getPixelForValue(6.2);
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.1)';
+        ctx.fillRect(left, y62, right - left, y55 - y62);
+        ctx.restore();
+      }
+    };
+
+    function updateWaterLevelStick() {
+      const conf = configLimits[activeChartStage];
+      let latestWl = null;
+      for (let i = rawSheetData.length - 1; i >= 0; i--) {
+        const row = rawSheetData[i];
+        if (activeChartStage === 'semai' && row.wl_semai !== null) { latestWl = row.wl_semai; break; }
+        if (activeChartStage === 'peremajaan' && row.wl_perem !== null) { latestWl = row.wl_perem; break; }
+        if (activeChartStage === 'pembesaran' && row.wl_pemb !== null) { latestWl = row.wl_pemb; break; }
+      }
+
+      const wlMaxLabel = document.getElementById('wl-max-label');
+      const wlCurrentLabel = document.getElementById('wl-current-label');
+      const wlFill = document.getElementById('wl-fill');
+
+      wlMaxLabel.innerHTML = `Max ${conf.maxWl}<br>Cm`;
+      
+      if (latestWl !== null) {
+        wlCurrentLabel.innerText = `${latestWl} cm`;
+        let percent = (latestWl / conf.maxWl) * 100;
+        if(percent > 100) percent = 100;
+        wlFill.style.height = `${percent}%`;
+        
+        wlFill.className = percent < 15 
+          ? "bg-red-500 w-full transition-all duration-1000 ease-out relative" 
+          : "bg-blue-500 w-full transition-all duration-1000 ease-out relative";
+      } else {
+        wlCurrentLabel.innerText = `-- cm`;
+        wlFill.style.height = `0%`;
+      }
+    }
+
+    function renderMainChart() {
+      const conf = configLimits[activeChartStage];
+      const labels = rawSheetData.map(d => `${d.tgl} ${d.jam}`);
+      
+      const mapData = (stageKey) => {
+        return rawSheetData.map(d => ({ ph: d[stageKey].ph !== null ? d[stageKey].ph : NaN, ppm: d[stageKey].ppm !== null ? d[stageKey].ppm : NaN }));
+      };
+
+      let currentData = [];
+      if(activeChartStage === 'semai') currentData = mapData('semai');
+      if(activeChartStage === 'peremajaan') currentData = mapData('perem');
+      if(activeChartStage === 'pembesaran') currentData = mapData('pemb');
+
+      const phDataset = currentData.map(d => d.ph);
+      const ppmDataset = currentData.map(d => d.ppm);
+
+      if (mainChartInstance) mainChartInstance.destroy();
+
+      const ctx = document.getElementById('main-chart').getContext('2d');
+      mainChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: `pH (${conf.label})`, data: phDataset,
+              borderColor: 'rgb(16, 185, 129)', backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              yAxisID: 'y', tension: 0.4, borderWidth: 2.5, pointRadius: 4, pointBackgroundColor: 'white', spanGaps: true
+            },
+            {
+              label: `TDS/PPM (${conf.label})`, data: ppmDataset,
+              borderColor: 'rgb(59, 130, 246)', backgroundColor: 'rgba(59, 130, 246, 0.1)',
+              yAxisID: 'y1', tension: 0.4, borderWidth: 2.5, pointRadius: 4, pointBackgroundColor: 'white', spanGaps: true
+            }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          scales: {
+            y: {
+              type: 'linear', display: true, position: 'left', min: 4, max: 9,     
+              title: { display: true, text: 'pH (Target: 5.5 - 6.2)', font: {size: 11, weight: 'bold'}, color: 'rgb(16, 185, 129)' },
+              grid: { color: 'rgba(0, 0, 0, 0.05)' }, ticks: { color: 'rgb(16, 185, 129)', font: { weight: 'bold' } }
+            },
+            y1: {
+              type: 'linear', display: true, position: 'right', 
+              suggestedMin: conf.minPpm, suggestedMax: conf.maxPpm,
+              title: { display: true, text: 'PPM', font: {size: 11, weight: 'bold'}, color: 'rgb(59, 130, 246)' },
+              grid: { drawOnChartArea: false }, ticks: { color: 'rgb(59, 130, 246)', font: { weight: 'bold' } }
+            },
+            x: { ticks: { font: { size: 10 }, maxTicksLimit: 7 } }
+          },
+          plugins: {
+            legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 8, font: {size: 11, weight: 'bold'} } },
+            tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.9)', titleFont: { size: 12 }, bodyFont: { size: 12 }, padding: 10, cornerRadius: 8 }
+          }
+        },
+        plugins: [optimalPhPlugin]
+      });
+
+      updateWaterLevelStick();
+    }
+
+    function setChartStage(stage) {
+      activeChartStage = stage;
+      ['semai', 'peremajaan', 'pembesaran'].forEach(s => {
+        const btn = document.getElementById(`btn-chart-${s}`);
+        if(s === stage) btn.className = "px-4 py-1.5 rounded-lg transition bg-white text-emerald-700 shadow-sm border border-slate-200 font-bold";
+        else btn.className = "px-4 py-1.5 rounded-lg transition text-slate-600 hover:text-slate-800 font-medium";
+      });
+      renderMainChart();
+    }
+
+    function changeTimeRange(days) {
+      [7, 14, 30].forEach(d => {
+        const btn = document.getElementById(`btn-range-${d}`);
+        if(d === days) btn.classList.add('bg-white', 'text-slate-800', 'shadow-sm');
+        else btn.classList.remove('bg-white', 'text-slate-800', 'shadow-sm');
+      });
+    }
+
+    // --- 5. LOGIKA OPERASIONAL (PROGRESS BAR, TANAM, PINDAH, PANEN) ---
+    const commodityConfig = {
+        'Selada': { pindahPeremajaan: 14, panen: 40 },
+        'Pakcoy': { pindahPeremajaan: 14, panen: 35 },
+        'Kailan': { pindahPeremajaan: 14, panen: 40 },
+        'Sawi Hijau': { pindahPeremajaan: 10, panen: 30 },
+        'Kangkung': { pindahPeremajaan: 10, panen: 25 },
+        'Bayam': { pindahPeremajaan: 10, panen: 25 }
+    };
+
+    function calculateAgeDays(dateString) {
+      if(!dateString) return 0;
+      const semaiDate = new Date(dateString);
+      if(isNaN(semaiDate)) return 0;
+      const diffTime = new Date() - semaiDate;
+      return Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+    }
+
+    function extractTypeAndVar(komoditiString) {
+        const parts = komoditiString.split(' - ');
+        return {
+            type: parts[0],
+            var: parts.length > 1 ? parts[1] : ''
+        };
+    }
+
+    function renderProgressBar(age, target, mode) {
+        let percent = (age / target) * 100;
+        if(percent > 100) percent = 100;
+        
+        let colorClass = 'bg-emerald-500';
+        if (mode === 'panen') {
+            if (percent >= 90) colorClass = 'bg-red-500';
+            else if (percent >= 70) colorClass = 'bg-amber-500';
+        } else if (mode === 'nursery') {
+            if (percent >= 100) colorClass = 'bg-red-500';
+            else if (percent >= 80) colorClass = 'bg-amber-500';
+        }
+
+        return `
+        <div class="mt-2">
+            <div class="flex justify-between text-[10px] text-slate-500 font-semibold mb-1">
+                <span>Usia: ${age} HSS</span>
+                <span>Target: ${target} HSS</span>
+            </div>
+            <div class="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                <div class="${colorClass} h-1.5 rounded-full transition-all duration-500" style="width: ${percent}%"></div>
+            </div>
+        </div>
+        `;
+    }
+
+    function switchTab(tab) {
+      ['nursery', 'peremajaan', 'pembesaran', 'panen'].forEach(t => {
+        const viewEl = document.getElementById(`view-${t}`);
+        if(viewEl) viewEl.classList.toggle('hidden', t !== tab);
+        
+        const btn = document.getElementById(`tab-${t}`);
+        if(t === tab) btn.className = "w-full text-left px-4 py-3 rounded-xl font-bold text-sm transition bg-emerald-600 text-white shadow space-y-1";
+        else btn.className = "w-full text-left px-4 py-3 rounded-xl font-semibold text-sm transition bg-slate-100 text-slate-600 hover:bg-slate-200 space-y-1";
+      });
+      renderAll();
+    }
+
+    const targetRowSelect = document.getElementById('target-row');
+    targetRowSelect.innerHTML = state.nurseryRows.map((r, i) => `<option value="${i}">Baris Tray #${r.id}</option>`).join('');
+
+    function plantCustomBatch() {
+      const type = document.getElementById('select-komoditi').value;
+      const varietas = document.getElementById('seed-variety').value;
+      const finalKomoditi = varietas ? `${type} - ${varietas}` : type;
+      
+      const rowIndex = parseInt(document.getElementById('target-row').value);
+      const qty = parseInt(document.getElementById('seed-qty').value);
+      
+      if(!qty || qty <= 0) { alert("Masukkan jumlah valid!"); return; }
+      
+      const row = state.nurseryRows[rowIndex];
+      const currentTotalInRow = row.batches.reduce((acc, curr) => acc + curr.count, 0);
+      if(currentTotalInRow + qty > 420) {
+        alert(`Kapasitas baris #${row.id} penuh! Sisa ruang: ${420 - currentTotalInRow}`); return;
+      }
+      
+      const prefix = type ? type.substring(0, 2).toUpperCase() : 'XX';
+      const d = new Date();
+      const codeStr = `${prefix}${['Ming','Sen','Sel','Rab','Kam','Jum','Sab'][d.getDay()]}${String(d.getDate()).padStart(2,'0')}${String(d.getMonth()+1).padStart(2,'0')}${d.getFullYear()}-${Math.floor(Math.random()*900)+100}`;
+      
+      row.batches.push({ 
+        id: Date.now(), 
+        code: codeStr, 
+        type: finalKomoditi,
+        count: qty, 
+        tglSemai: new Date().toISOString() 
+      });
+      
+      document.getElementById('seed-variety').value = ''; 
+      renderAll();
+      autoSync(); // SINKRONISASI AKTIF
+    }
+
+    function moveToPeremajaan(batchId) {
+      let foundBatch, foundRow;
+      state.nurseryRows.forEach(r => {
+        const b = r.batches.find(x => x.id === batchId);
+        if(b) { foundBatch = b; foundRow = r; }
+      });
+      if(!foundBatch) return;
+      
+      const count = state.peremajaanBatches.reduce((a, c) => a + c.count, 0);
+      if(count + foundBatch.count > 2400) { alert("Meja Peremajaan Penuh!"); return; }
+      
+      state.peremajaanBatches.push({ ...foundBatch });
+      foundRow.batches = foundRow.batches.filter(x => x.id !== batchId);
+      renderAll();
+      autoSync(); // SINKRONISASI AKTIF
+    }
+
+    function moveToPembesaran(batchId) {
+      const tableSelect = document.getElementById(`select-table-${batchId}`);
+      const tableId = parseInt(tableSelect.value);
+      const batchIdx = state.peremajaanBatches.findIndex(b => b.id === batchId);
+      if(batchIdx === -1) return;
+      
+      const batch = state.peremajaanBatches[batchIdx];
+      const targetTable = state.pembesaranTables.find(t => t.id === tableId);
+      const currentCount = targetTable.rowsData.reduce((s, r) => s + r.count, 0);
+      
+      if((currentCount + batch.count) > 400) { 
+        alert(`Sisa ruang meja #${tableId} hanya ${400 - currentCount} lubang!`); return; 
+      }
+
+      let remaining = batch.count;
+      while(remaining > 0) {
+        let rowUsages = Array(10).fill(0);
+        targetTable.rowsData.forEach(r => {
+          let rIdx = parseInt(r.rowName.replace("Baris ", "")) - 1;
+          if(rIdx >= 0 && rIdx < 10) rowUsages[rIdx] += r.count;
+        });
+
+        let targetRowIdx = rowUsages.findIndex(u => u < 40);
+        if(targetRowIdx === -1) break;
+
+        let space = 40 - rowUsages[targetRowIdx];
+        let amountToPut = Math.min(space, remaining);
+
+        targetTable.rowsData.push({ ...batch, count: amountToPut, rowName: `Baris ${targetRowIdx + 1}`, id: Date.now() + Math.random() });
+        remaining -= amountToPut;
+      }
+      state.peremajaanBatches.splice(batchIdx, 1);
+      renderAll();
+      autoSync(); // SINKRONISASI AKTIF
+    }
+
+    let activePanenData = null;
+    function openPanenModal(tableId, rowId) {
+      const table = state.pembesaranTables.find(t => t.id === tableId);
+      const item = table.rowsData.find(r => r.id === rowId);
+      activePanenData = { tableId, rowId, maxQty: item.count, item };
+      
+      const parsed = extractTypeAndVar(item.type);
+      document.getElementById('modal-panen-info').innerText = `${parsed.type} ${parsed.var ? `(${parsed.var})` : ''} - Total: ${item.count} Sayur`;
+      document.getElementById('modal-panen-qty').value = item.count;
+      document.getElementById('modal-panen').classList.remove('hidden');
+    }
+    
+    function closePanenModal() { document.getElementById('modal-panen').classList.add('hidden'); }
+    
+    function executePanenCustom() {
+      const qty = parseInt(document.getElementById('modal-panen-qty').value);
+      if(isNaN(qty) || qty <= 0 || qty > activePanenData.maxQty) return;
+      
+      const { tableId, rowId, item } = activePanenData;
+      const table = state.pembesaranTables.find(t => t.id === tableId);
+      const rowIndex = table.rowsData.findIndex(r => r.id === rowId);
+      
+      state.inventoryReadyToPack.push({ ...item, count: qty, id: Date.now() });
+      if(qty === item.count) table.rowsData.splice(rowIndex, 1);
+      else item.count -= qty;
+      
+      closePanenModal();
+      renderAll();
+      autoSync(); // SINKRONISASI AKTIF
+    }
+    
+    function packAndSell(itemId) {
+      const idx = state.inventoryReadyToPack.findIndex(i => i.id === itemId);
+      if(idx === -1) return;
+      const item = state.inventoryReadyToPack[idx];
+      const price = parseFloat(document.getElementById(`price-${item.id}`).value) || 0;
+      
+      if (price <= 0) { alert("Masukkan harga jual yang valid terlebih dahulu!"); return; }
+
+      const payload = {
+        tanggalJam: new Date().toISOString(),
+        kodeUnik: item.code, komoditi: item.type, umurTanam: calculateAgeDays(item.tglSemai),
+        jumlah: item.count, hargaPcs: price, totalPendapatan: item.count * price
+      };
+
+      const statusEl = document.getElementById('sync-status');
+      statusEl.innerHTML = "⏳ Merekam Penjualan...";
+      statusEl.className = "text-xs font-bold text-amber-500";
+
+      fetch(API_URL, {
+        method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: "saveSale", payload: payload })
+      }).then(res => res.json()).then(res => {
+        if(res.success) {
+          alert(`✅ Berhasil merekam penjualan ${item.count} tanaman senilai Rp ${(item.count * price).toLocaleString('id-ID')} ke Sheet2.`);
+        }
+      });
+      
+      state.inventoryReadyToPack.splice(idx, 1);
+      renderAll();
+      autoSync(); // SINKRONISASI AKTIF
+    }
+
+    function renderAll() {
+      // 1. NURSERY
+      document.getElementById('nursery-tbody').innerHTML = state.nurseryRows.map(r => {
+        const total = r.batches.reduce((a, c) => a + c.count, 0);
+        return `
+          <tr class="border-b ${r.batches.length === 0 ? "bg-slate-50" : "bg-white"}">
+            <td class="p-4 align-top border-r border-slate-100">
+              <strong class="text-slate-700">Baris Tray #${r.id}</strong><br>
+              <span class="text-[10px] bg-slate-200 px-2 py-0.5 rounded font-bold text-slate-600 mt-1 inline-block">${total} / 420 Terisi</span>
+            </td>
+            <td class="p-3 align-top">
+              ${r.batches.length === 0 ? '<span class="text-slate-400 italic text-xs">Baris kosong...</span>' : `
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                  ${r.batches.map(b => {
+                    const parsed = extractTypeAndVar(b.type);
+                    const age = calculateAgeDays(b.tglSemai);
+                    const target = commodityConfig[parsed.type]?.pindahPeremajaan || 14;
+                    const ready = age >= target;
+                    return `
+                    <div class="bg-white p-3 border rounded-xl shadow-sm ${ready ? 'border-amber-300' : ''}">
+                      <div class="flex justify-between items-start">
+                        <div>
+                          <div class="font-bold text-emerald-800 text-sm">${parsed.type} ${parsed.var ? `<span class="text-[10px] text-slate-400 font-normal">(${parsed.var})</span>` : ''}</div>
+                          <div class="text-[10px] text-slate-500">Qty: ${b.count} | Kode: ${b.code}</div>
+                        </div>
+                        <button onclick="moveToPeremajaan(${b.id})" class="${ready ? 'bg-amber-500 hover:bg-amber-600 animate-pulse' : 'bg-blue-600 hover:bg-blue-700'} text-white px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap">Pindah ➔</button>
+                      </div>
+                      ${renderProgressBar(age, target, 'nursery')}
+                    </div>`
+                  }).join('')}
+                </div>
+              `}
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      // 2. PEREMAJAAN
+      const peremCount = state.peremajaanBatches.reduce((a, c) => a + c.count, 0);
+      document.getElementById('peremajaan-capacity').innerText = `Terisi: ${peremCount} / 2400`;
+      document.getElementById('peremajaan-list').innerHTML = state.peremajaanBatches.map(b => {
+        const parsed = extractTypeAndVar(b.type);
+        return `
+          <div class="p-3 border rounded-xl bg-white flex flex-col gap-2 shadow-sm text-xs">
+            <div class="flex justify-between">
+              <strong class="text-sm text-slate-800">${parsed.type} ${parsed.var ? `<span class="text-slate-500 text-[10px] font-normal">(${parsed.var})</span>` : ''}</strong> 
+              <span class="font-bold text-blue-600">Usia: ${calculateAgeDays(b.tglSemai)} HSS</span>
+            </div>
+            <div class="flex gap-2 mt-1">
+              <select id="select-table-${b.id}" class="flex-1 p-1.5 border rounded-lg bg-slate-50 outline-none">
+                ${state.pembesaranTables.map(t => {
+                  let s = 400 - t.rowsData.reduce((s,r) => s+r.count, 0);
+                  return `<option value="${t.id}" ${s < b.count ? 'disabled' : ''}>Meja #${t.id} (Sisa ${s})</option>`;
+                }).join('')}
+              </select>
+              <button onclick="moveToPembesaran(${b.id})" class="bg-emerald-600 text-white px-3 rounded-lg font-bold">Pindah ➔</button>
+            </div>
+          </div>
+        `}).join('');
+
+      // 3. PEMBESARAN DENGAN BAR USIA & WARNING
+      const renderTable = (t) => {
+        let total = t.rowsData.reduce((s, r) => s + r.count, 0);
+        return `
+        <div class="p-4 border border-slate-200 rounded-xl bg-slate-50 shadow-sm flex flex-col">
+          <div class="flex justify-between items-center border-b pb-2 mb-2">
+            <h4 class="font-bold text-sm text-slate-800">Meja #${t.id}</h4>
+            <span class="text-[10px] ${total >= 400 ? 'bg-red-100 text-red-700' : 'bg-white border text-slate-600'} px-2 py-0.5 rounded font-bold shadow-sm">${total} / 400</span>
+          </div>
+          <div class="space-y-3 flex-1 overflow-y-auto max-h-[350px] pr-1">
+            ${t.rowsData.length > 0 ? t.rowsData.map(r => {
+              const parsed = extractTypeAndVar(r.type);
+              const age = calculateAgeDays(r.tglSemai);
+              const target = commodityConfig[parsed.type]?.panen || 40;
+              const isWarning = age >= (target - 10); 
+              
+              return `
+              <div class="p-3 bg-white border border-slate-200 rounded-xl text-xs shadow-sm relative overflow-hidden">
+                ${isWarning ? '<div class="absolute left-0 top-0 bottom-0 w-1 bg-amber-400"></div>' : ''}
+                <div class="flex justify-between items-start mb-1">
+                  <div>
+                    <span class="font-black text-emerald-900">${parsed.type}</span> ${parsed.var ? `<span class="text-[10px] text-slate-500">(${parsed.var})</span>` : ''}
+                    <div class="text-[10px] text-slate-500 mt-0.5">${r.rowName} • Qty: <strong class="text-slate-800">${r.count}</strong></div>
+                  </div>
+                  <button onclick="openPanenModal(${t.id}, ${r.id})" class="${age >= target ? 'bg-amber-500 animate-bounce' : 'bg-emerald-100 text-emerald-800 border border-emerald-200 hover:bg-emerald-600 hover:text-white'} px-3 py-1 rounded-lg text-[10px] font-bold transition">Panen</button>
+                </div>
+                
+                ${renderProgressBar(age, target, 'panen')}
+                
+                ${isWarning && age < target ? `
+                  <div class="mt-2 p-1.5 bg-amber-50/80 border border-amber-200/50 rounded flex items-center gap-1 text-[9px] text-amber-700 font-bold leading-tight">
+                    <span class="text-base">⚠️</span> Siapkan penyemaian benih baru di Nursery!
+                  </div>
+                ` : ''}
+              </div>
+            `}).join('') : '<p class="text-[11px] text-slate-400 italic text-center py-4">Meja masih kosong.</p>'}
+          </div>
+        </div>
+      `};
+      
+      document.getElementById('pembesaran-grid-1').innerHTML = state.pembesaranTables.filter(t => t.id <= 7).map(renderTable).join('');
+      document.getElementById('pembesaran-grid-2').innerHTML = state.pembesaranTables.filter(t => t.id > 7).map(renderTable).join('');
+
+      // 4. PANEN KEMAS
+      document.getElementById('packaging-area').innerHTML = state.inventoryReadyToPack.map(item => {
+        const parsed = extractTypeAndVar(item.type);
+        return `
+          <div class="p-4 bg-white border border-emerald-100 rounded-xl flex flex-col gap-3 shadow-sm text-xs">
+            <div>
+              <strong class="text-emerald-900 text-sm">${parsed.type}</strong> ${parsed.var ? `<span class="bg-emerald-50 text-emerald-700 border border-emerald-100 px-1.5 py-0.5 rounded text-[10px]">${parsed.var}</span>` : ''}<br>
+              <span class="text-slate-500 block mt-1">Total Siap Kemas: <strong class="text-slate-800">${item.count} lubang</strong></span>
+            </div>
+            <div class="flex gap-2 items-center bg-emerald-50/50 p-2 rounded-lg border border-emerald-100">
+              <span class="text-[11px] font-semibold text-emerald-800">Harga: Rp</span>
+              <input type="number" id="price-${item.id}" placeholder="Msl: 6000" class="flex-1 p-2 border border-emerald-200 rounded text-xs outline-none font-bold text-slate-700" value="6000">
+              <button onclick="packAndSell(${item.id})" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded font-bold transition">Jual</button>
+            </div>
+          </div>
+      `}).join('');
+    }
+
+    // Jam Realtime
+    setInterval(() => {
+      const now = new Date();
+      document.getElementById('realtime-clock').innerText = now.toLocaleDateString('id-ID', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }, 1000);
+
+    // Initialisasi Data Dari Database
+    renderMainChart();
+    loadDataFromDatabase();
+    
+    // Auto refresh grafik jika browser di resize
+    window.addEventListener('resize', () => { if(mainChartInstance) mainChartInstance.resize(); });
+  </script>
+</body>
+</html>
